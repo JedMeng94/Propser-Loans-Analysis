@@ -1,0 +1,566 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+---
+Loan Data Analysis by Jed
+========================================================
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+
+
+library(dplyr)
+library(ggplot2)
+library(knitr)
+library(GGally)
+library(scales)
+knitr::opts_chunk$set(fig.width=9,fig.height=6,fig.path='Figs/',
+                      fig.align='center',tidy=TRUE,
+                      echo=FALSE,warning=FALSE,message=FALSE)
+```
+
+```{r echo=FALSE, Load_the_Data}
+# Load the Data
+df <- read.csv('prosperLoanData.csv')
+df<- select(df,Term,BorrowerAPR, LenderYield, EstimatedReturn, ProsperRating..Alpha., IsBorrowerHomeowner,CreditScoreRangeLower,TotalCreditLinespast7years,DelinquenciesLast7Years,IncomeVerifiable,IncomeRange,Recommendations,EstimatedEffectiveYield,Investors,StatedMonthlyIncome,TradesNeverDelinquent..percentage.,LoanOriginalAmount,LP_ServiceFees)
+
+```
+
+
+# Univariate Plots Section
+
+
+```{r echo=FALSE, Univariate_Plots}
+#Load basic stats about the data and plot a histogram of credit score
+str(df)
+
+ggplot(data = subset(df,df$CreditScoreRangeLower>0),
+       aes(x = CreditScoreRangeLower))+
+  geom_histogram(binwidth = 20)
+
+```
+
+This looks like a very normal distribution. There is a slight jump at 600 
+perhaps because it qualifies them for certain benefits but I am not 100% sure. 
+Most of the credit scores lie in the range of 620 - 750. There also seem to be 
+a few credit scores over 850 which is supposed to be the maximum.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Effective Yield histogram
+ggplot(data = df,
+       aes(x=EstimatedEffectiveYield))+
+  geom_histogram(binwidth = .05)
+```
+
+Estimated effective yield is the amount of money the lender hopes to make from
+the loan. No one wants to loan money to somone that is going to have a negative yield so 
+this makes sense.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Reorder the Prosper ratings and plot
+
+df$ProsperRating..Alpha. <- ordered(df$ProsperRating..Alpha. , levels = c('','AA','A','B','C','D','E','HR'))
+ggplot(data = subset(df,ProsperRating..Alpha.!=''),
+       aes(x=ProsperRating..Alpha.))+
+  geom_histogram(stat = 'count')
+```
+
+I had to get rid of all of the listings without a Prosper number and then 
+resort with AA as the best rating. This distribution looks about right with AA 
+being the least common. Maybe people with AA ratings don't need to go to 
+Prosper?
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Investors Histogram
+ggplot(data = df,
+       aes(x=Investors))+
+  geom_histogram(binwidth = 1)+
+  coord_cartesian(xlim = c(0,100))
+```
+
+Number of investors for each loan. Almost all people that needed loans only needed 1 investor.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Make sure that incomes are verified before plotting
+
+ggplot(data = subset(df,StatedMonthlyIncome>0),
+       aes(x=StatedMonthlyIncome))+
+  geom_histogram(binwidth = 500)+
+  coord_cartesian(xlim= c(0,quantile(df$StatedMonthlyIncome,.99)))
+
+
+summary(df$StatedMonthlyIncome)
+```
+This is the distribution of borrowers incomes. They are not all verified so I will sort
+by verified incomes in the below plot.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+
+
+
+ggplot(data = subset(df,StatedMonthlyIncome>0 & IncomeVerifiable =="True"),
+       aes(x=StatedMonthlyIncome))+
+  geom_histogram(binwidth = 500)+
+  coord_cartesian(xlim= c(0,quantile(df$StatedMonthlyIncome,.99)))
+  
+summary(subset(df,StatedMonthlyIncome>0 & IncomeVerifiable =="True")$StatedMonthlyIncome)
+```
+
+The median Stated monthly income was 4667. The extremely rich have stated 
+monthly incomes over 1 million so a mean would be a better measure. After 
+subseting by people who have verified incomes, we see that the max has gone 
+down but the mean and median are about the same.
+
+
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Difference between homeowners?
+ggplot(data = df,
+       aes(x=Term))+
+  geom_bar()+
+  scale_x_continuous(breaks = c(12,36,60))
+```
+The terms of all loans. Barely any seem to be 12 months for some reason.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+
+ggplot(data = subset(df,IsBorrowerHomeowner== 'True'),
+       aes(x=Term))+
+  geom_bar()+
+  scale_x_continuous(breaks = c(12,36,60))
+```
+
+I was wondering if people who already owned homes changed had different ideas 
+on how long they needed a term to be. It doesn't look like there is any 
+difference between homeowners and non-homeowners.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Sort by different Prosper ratings to see differences
+
+ggplot(data = df,
+       aes(x=BorrowerAPR))+
+  geom_histogram(binwidth = .01)
+```
+I think APR will be a main focus on my analysis. APR is a good representation 
+of the risk each loan has. If a loan is risk and might not be paid back, a high 
+APR will be necessary. Just looking at the APR distribution without subsetting, 
+the distribution looks normal.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+
+ggplot(data = subset(df,ProsperRating..Alpha. == 'AA'),
+       aes(x=BorrowerAPR))+
+  geom_histogram(binwidth = .01)
+```
+However, looking at the data after subsetting by Prosper rating changes the story.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+
+ggplot(data = subset(df,ProsperRating..Alpha. == 'E'),
+       aes(x=BorrowerAPR))+
+  geom_histogram(binwidth = .01)
+```
+Higher Prosper rating clearly leads to lower APR.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+
+ggplot(data =  subset(df,IsBorrowerHomeowner== 'True'),
+       aes(x=BorrowerAPR))+
+  geom_histogram(binwidth = .01)
+
+
+```
+
+When we subset by different Prosper ratings, we see that higher ratings lead to lower APR. There is also a spike at 
+36% APR for some reason. I will be looking into this variable more in the next 
+analysis. The homeowner subset looks very similar to our original plot though.
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+
+Out of all of the variables we have to explore, I will mainly be focusing on
+the following:
+Term (12,36,60 months)
+BorrowerAPR
+LenderYield
+EstimatedReturn
+ProsperRating (AA, A,B ,C ,D ,E, HR from best -> worst)
+IsBorrowerHomeowner (T/F)
+CreditScoreRangeLower
+TotalCreditLinespast7years
+DelinquenciesLast7Years
+IncomeVerifiable (T/F)
+IncomeRange
+Recommendations
+
+Most loans are 36 month loans and very few loans are 12 months.
+
+Almost everyone has their income verified
+
+About half the loans are made by homeowners.
+
+### What is/are the main feature(s) of interest in your dataset?
+
+The main features of this dataset are the APR and how each variable will affect
+the APR.
+
+### What other features in the dataset do you think will help support your 
+investigation into your feature(s) of interest?
+
+
+
+### Did you create any new variables from existing variables in the dataset?
+
+### Of the features you investigated, were there any unusual distributions? 
+Did you perform any operations on the data to tidy, adjust, or change the form 
+of the data? If so, why did you do this?
+
+
+# Bivariate Plots Section
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,fig.width=10, fig.height=10, Bivariate_Plots}
+theme_set(theme_minimal(10))
+
+set.seed(42)
+
+df_subset <- df[c(1:4,7:10,12)]#add more variables you want to measure here
+ggpairs(df_subset[sample.int(nrow(df_subset),100),])+
+  theme(text = element_text(size= 8))
+
+```
+Paired data to see a broad view of relationships between variables.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+#APR vs Credit score 
+
+ggplot(data = df,
+       aes(x = BorrowerAPR, y = CreditScoreRangeLower))+
+  geom_point()
+```
+
+There are a lot of values that are 0 that are probably not valid data points. 
+I will remove those as well as lowering the alpha of the point to see where 
+more of the points are distributed.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+#Add a smoother
+
+ggplot(data = subset(df,CreditScoreRangeLower>0),
+       aes(x = BorrowerAPR, y = CreditScoreRangeLower))+
+  geom_jitter(alpha = .03)+
+  geom_smooth(color = 'light Blue')
+```
+It looks like the smoother is fairly consistent from the 5% APR range to around the 25%.
+There seems to be a negative correlation between APR and credit score.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Statistical analysis
+with(subset(df,CreditScoreRangeLower>0),cor.test(BorrowerAPR,CreditScoreRangeLower))
+with(subset(df,CreditScoreRangeLower>0 & BorrowerAPR< .25 & BorrowerAPR >.05),cor.test(BorrowerAPR,CreditScoreRangeLower))
+
+summary(subset(select(df,BorrowerAPR,CreditScoreRangeLower),CreditScoreRangeLower>0))
+   
+```
+
+Here I have subset the data and changed the alpha to .03 since we have so many 
+datapoints. It looks like we can see that there is some significance in the 
+data. The main thing I see is that the region with APR between 5% and 25% seems 
+to have more correlation with credit score than the region above 25%.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Different boxplots to see Prosper rating effects
+
+ggplot(data = subset(df,ProsperRating..Alpha.!= ''),
+       aes(x= ProsperRating..Alpha., y=BorrowerAPR))+
+  geom_boxplot()
+```
+Borrower APR boxplot sorted by Prosper rating. There is strong correlation.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+
+ggplot(data = subset(df,ProsperRating..Alpha.!= ''),
+       aes(x= ProsperRating..Alpha., y=LenderYield))+
+  geom_boxplot()
+
+
+subset(df,ProsperRating..Alpha.!= '')%>%
+  group_by(ProsperRating..Alpha.)%>%
+  summarise(mean_APR = mean(BorrowerAPR),
+            mean_yield = mean(LenderYield),
+            n = n())
+
+```
+
+As we can see with these boxplots, the prosper rating has a very clear effect 
+on what the APR rate will be. The APR and Lender yield will obviously have very 
+similar values. APR will always be higher than the yield though, just because 
+Prosper has to take a cut.
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+#Change the order of IncomeRange and make a boxplot
+
+df$IncomeRange <- ordered(df$IncomeRange , levels = c('Not employed','$0','$1-24,999','$25,000-49,999','$50,000-74,999','$75,000-99,999','$100,000+','Not displayed'))
+
+ggplot(data = subset(df,IncomeRange!= 'Not displayed' & IncomeVerifiable == "True"),
+       aes(x= IncomeRange, y=BorrowerAPR))+
+  geom_boxplot()+
+  theme(text = element_text(size= 10))
+
+table(subset(df,IncomeRange!= 'Not displayed' & IncomeVerifiable == "True")$IncomeRange)
+```
+
+I had initially made the error of not subsetting the data by only incomes that 
+had been verified which would probably have had incorrect data. Now this plot 
+is interesting because for some reason, the unemployed people have a very low 
+APR. This doesn't seem right but after looking at the table, we can see that 
+there are so few people that are unemployed or with $0 of net income, that it 
+would probably make the data inaccurate. Everything else in the graph seems 
+very reasonable and it makes sense that people with higher incomes would be 
+able to secure loans with less APR.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+#Make sure to set alpha lower to see density if different graphs
+
+ggplot(data = df,
+       aes(x= IsBorrowerHomeowner, y=BorrowerAPR))+
+  geom_boxplot()
+```
+
+I plotted some other insights from the data but these do not seem as conclusive
+as the previous plots. Homeowners do have less APR on average but only by
+around 4%.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+
+
+ggplot(data = subset(df,DelinquenciesLast7Years<50),
+       aes(x= DelinquenciesLast7Years, y= BorrowerAPR))+
+  geom_point(alpha = .05)
+```
+The delinquencies of the last 7 years do not seem to have a huge impact on the 
+APR but most people have 0. Maybe this info is not very visible to the lender? 
+
+
+```{r echo=FALSE,message=FALSE, warning=FALSE}
+
+ggplot(data = df,
+       aes(x= BorrowerAPR, y= LoanOriginalAmount))+
+  geom_point(alpha = .05)
+
+
+
+```
+
+
+Most loan amounts are less than 10k and those loans seem to vary in APR. This 
+may mean that people do not want to lend too much money to those with high 
+risk. Why do all of the 35k loan amounts have similar APR's? It is interesting 
+to see that as the amount of the loan increases, the average APR range 
+decreases. Maybe only financially stable people borrow large amounts of money?
+
+
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the 
+investigation. How did the feature(s) of interest vary with other features in 
+the dataset?
+
+My main focus of this dataset has been how the interest a borrower has to pay 
+is affected by their various characteristics. Many of my initial thoughts did 
+end up having an affect such as having a higher income or credit score. 
+Some things such as the number of delinquencies and being a home owner has 
+less of an affect that I would have thought. 
+  
+  ### Did you observe any interesting relationships between the other features 
+  (not the main feature(s) of interest)?
+  
+  I thought I would have been able to find a formula for the service fee 
+  fairly easily but the service fee might be a more complicated formula.
+  
+  ### What was the strongest relationship you found?
+  
+  The strongest relationship was the one between APR and and the Prosper 
+  rating. I think this would probably be because Prosper would advertise their 
+  own rating much harder than they would any other metric. People also might 
+  not want to look too deeply into other metrics on their own.
+  
+# Multivariate Plots Section
+
+```{r echo=FALSE, Multivariate_Plots}
+#Clearly show how income range affects both APR and Credit scores
+
+ggplot(data = subset(df,IncomeRange!= 'Not displayed'),
+       aes(x= BorrowerAPR, y= CreditScoreRangeLower))+
+  geom_point(aes(color = IncomeRange), alpha = .1, size = 2)+
+  theme(text = element_text(size= 13))+
+  scale_color_brewer(type = "div", palette = "RdYlBu") +
+  guides(color=guide_legend(title="Income Range", override.aes = list(alpha = 1)))
+
+```
+
+We can see here that people with higher incomes are also in the higher range 
+of the credit score range. This obviously makes sense as the more money you 
+have the less likely you are to default on payments. The higher values on the 
+APR range also tend to be from people that make less money. This kind of lends 
+to the idea that it costs a lot of money to be poor.
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Change term to a factor to make it easier to plot
+  
+df$Term <- as.factor(df$Term)
+ggplot(data = subset(df,IncomeRange!= 'Not displayed'& StatedMonthlyIncome<250000),
+       aes(x= BorrowerAPR, y= StatedMonthlyIncome))+
+  geom_point(aes(color = Term),alpha = .1)+
+  theme(text = element_text(size= 13))+
+  coord_cartesian(ylim = c(0,100000))
+```
+
+It looks like people that take out shorter term loans tend to have lower APR. 
+Maybe this is because there is less risk in shorter loans? It does not seem 
+conclusive though.
+
+```{r echo=FALSE}
+#Create a service percentage variable by using service fees / original amount
+
+df$Service_percentage <- -df$LP_ServiceFees/df$LoanOriginalAmount
+```
+I created a new variable to see the percentage fee that Prosper takes per loan. I 
+will look into different possibilities below.
+
+```{r echo=FALSE}
+
+ggplot(data = subset(df,IncomeVerifiable == "True"&StatedMonthlyIncome<50000),
+       aes(x= StatedMonthlyIncome, y= Service_percentage))+
+  geom_point(alpha=.05)
+
+ggplot(data = df,
+       aes(x=LoanOriginalAmount, y=Service_percentage))+
+  geom_point(alpha=.05)
+
+ggplot(data = df,
+       aes(x=Investors, y=Service_percentage))+
+  geom_point(alpha=.05)
+```
+
+I wanted to create a variable to see how the service fee was calculated but I
+was not able to see a direct correlation with any of the variables. The service
+fee is almost always under 2% though.
+```{r echo=FALSE}
+summary(df$Service_percentage)
+```
+
+Summary of Service fee percentage.
+
+```{r echo=FALSE,message=FALSE, warning=FALSE,}
+#Facet wrap with Incomerange
+
+ggplot(data = subset(df,IncomeRange != 'Not displayed' & ProsperRating..Alpha.!=''),
+       aes(x= ProsperRating..Alpha.,y= BorrowerAPR))+
+  geom_boxplot(alpha = .1)+
+  facet_wrap(~IncomeRange)
+```
+
+The pattern of APR is generally the same no matter your income level. The main 
+thing that affects the APR is still the Prosper rating.
+
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the 
+investigation. Were there features that strengthened each other in terms of 
+looking at your feature(s) of interest?
+
+I think adding a layer showing the income range along with APR and the credit 
+score really solidified how higher APR is for the poorer. I also saw that 
+the Prosper rating means a lot to how APR is calculated.
+
+### Were there any interesting or surprising interactions between features?
+
+I was surprised that the service fee was not clearly stated or easily 
+calculated. I thought Prosper would be upfront about what they charge.
+
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE,message=FALSE, warning=FALSE, Plot_One}
+df$ProsperRating..Alpha. <- ordered(df$ProsperRating..Alpha. , levels = c('','AA','A','B','C','D','E','HR'))
+ggplot(data = subset(df,ProsperRating..Alpha.!=''),
+       aes(x=ProsperRating..Alpha.))+
+  geom_histogram(stat = 'count')+
+  ggtitle("Distribution of Proser ratings")
+  
+  
+```
+
+### Description One
+The distribution of Prosper ratings is very normal. AA seems to be a bit more 
+rare than expected.
+
+### Plot Two
+```{r echo=FALSE,message=FALSE, warning=FALSE, Plot_Two}
+ggplot(data = subset(df,IncomeRange!= 'Not displayed'),
+       aes(x= BorrowerAPR, y= CreditScoreRangeLower))+
+  geom_point(aes(color = IncomeRange), alpha = .1)+
+  theme(text = element_text(size= 13))+
+  ggtitle("APR based on Credit Score and Income Range")+
+  scale_x_continuous(labels = percent)
+```
+
+### Description Two
+This plot seems to suggest that lower income people tend to have lower credit 
+scores. There is some slight correlation between credit scores and APR.
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+ggplot(data = subset(df,ProsperRating..Alpha.!= ''),
+       aes(x= ProsperRating..Alpha., y=BorrowerAPR,fill=ProsperRating..Alpha.))+
+  geom_boxplot(alpha = .1)+
+  theme(text = element_text(size= 13))+
+  ggtitle('APR based on Prosper rating')+
+  scale_y_continuous(labels = percent)
+```
+
+### Description Three
+APR seems to be most dependant on the Prosper rating. There are clear cut 
+percentages for each rating. 
+------
+  
+  # Reflection
+
+I thought that this dataset was very different than previous datasets. There 
+were so many different variables that it made things hard to connect. I chose 
+to look at APR because that was what I thought I understood the most. A lot 
+of the other data seemed like it needed some research to really understand. 
+I think I was able to determine strong relationships between different APR and 
+other variables. I'm not sure why the service fee was hard to figure out but 
+there must be a lot of variables going into that calculation. In the future, I 
+think I could find more relationships between other variables like 
+delinquencies and the amount of open lines of credit. It seems like I could find
+a lot of credit score and amount of delinquencies. It would be expected that 
+higher income leads to less delinquencies. I could also have looked at collection
+fees and what imcome/credit group has higher fees.
+
+I think learning and all of these statistical tools was fairly difficult. I think
+the idea of plotting was fairly easy but the code to adjust different things was 
+harder than expected. I also thought data like this would be more straight 
+forward in terms of how easy it is to find trends but it was more difficult than 
+I thought. Not everything in the real world is simple so I guess this is why 
+companies need data analysts. The biggest thing I would like to improve on is 
+creating plots that are fun to look at while being useful at the same time.
+
+
+
+
+  markdown::('R project.R')
